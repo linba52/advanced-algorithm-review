@@ -68,3 +68,12 @@ This translation makes the pointer size essentially the logarithm of the probe
 index. The whole problem becomes: dynamically maintain assignments so that every
 live key uses an early candidate in its own probe sequence, even under arbitrary
 insertions, deletions, and reinsertion of the same key.
+
+- 2026-07-07: Collected related-work directions. The paper itself connects tiny
+  pointers to retrieval, succinct/dynamic trees, stable hashing/dictionaries,
+  variable-size values, internal-memory stashes, and dynamic balls-and-bins.
+  I also searched for later work. I did not find an obvious later paper whose
+  main contribution is explicitly titled as a direct continuation of "tiny
+  pointers"; later relevance appears mostly in adjacent areas such as succinct
+  dictionaries, cell-probe lower bounds, retrieval structures, minimal perfect
+  hashing, and dynamic rank/select.
