@@ -1,174 +1,153 @@
-# Technical Notes
+# 技术笔记
 
-This file records the evolving technical understanding of *Tiny Pointers*.
+本文档记录对 *Tiny Pointers* 的技术理解如何逐步形成。
 
-The final review should explain:
+最终 review 需要解释：
 
-- What problem the paper solves.
-- Why the problem is important.
-- What model the paper introduces.
-- What techniques the paper uses.
-- What the key intuition is.
-- How the construction works.
-- Why the construction is correct.
-- Why the bounds are strong or optimal.
+- 论文解决了什么问题；
+- 这个问题为什么重要；
+- 论文引入了什么模型；
+- 论文使用了什么技术；
+- 核心直觉是什么；
+- 构造如何工作；
+- 为什么构造是正确的；
+- 为什么这些界很强，甚至是最优的。
 
-## Initial Technical Map
+## 初始技术地图
 
-### Model
+### 模型
 
-There is an array/store of `n` slots. Each live key `k` may own at most one slot
-at a time. A dereference table maintains the slot assignment. The key point is
-that `p` is not an absolute slot number; instead, `Dereference(k, p)` computes a
-slot from the owner key and the short pointer.
+有一个包含 `n` 个槽位的数组或 store。每个活跃 key `k` 同一时刻最多拥有一个槽位。
+dereference table 维护 key 到槽位的分配。关键点是：`p` 不是绝对槽位编号；
+`Dereference(k, p)` 使用 owner key 和短 pointer 一起计算槽位。
 
-### Fixed-Size Upper Bound
+### 固定长度上界
 
-Theorem 1 gives fixed-size tiny pointers of
-`O(log log log n + log delta^{-1})` bits at load factor `1 - delta`.
+定理 1 给出了固定长度 tiny pointers：在负载率 `1 - delta` 下，pointer 大小为
+`O(log log log n + log delta^{-1})` 位。
 
-The construction has two pieces:
+构造包含两个部分：
 
-1. A primary load-balancing table stores almost all allocations. It partitions
-   the store into buckets of size `Theta(delta^{-2} log delta^{-1})`. Key `k`
-   hashes to a bucket, and `p` records the slot inside that bucket. The table is
-   allowed to fail on a small fraction of allocations.
-2. A secondary sparse table stores primary-table overflow. This secondary table
-   uses a power-of-two-choices style construction with buckets of size
-   `Theta(log log n)`, so the local slot can be described in
-   `O(log log log n)` bits.
+1. 主 load-balancing table 存储绝大多数分配。它把 store 分成大小为
+   `Theta(delta^{-2} log delta^{-1})` 的 bucket。key `k` 被哈希到一个 bucket，
+   `p` 记录 bucket 内的 slot。该表允许少量分配失败。
+2. 稀疏副表存储主表 overflow。副表使用 power-of-two-choices 风格构造，bucket 大小为
+   `Theta(log log n)`，因此局部 slot 可用 `O(log log log n)` 位描述。
 
-The fixed-size pointer needs enough bits to say whether it points into the
-primary or secondary table and then enough local information to recover the slot.
-The `log delta^{-1}` term comes from the bucket size needed for high load; the
-`log log log n` term comes from the sparse power-of-two-choices secondary
-structure.
+固定长度 pointer 需要足够位数来说明它指向主表还是副表，并记录对应局部信息。`log
+delta^{-1}` 项来自高负载所需的 bucket 大小；`log log log n` 项来自稀疏
+power-of-two-choices 副表。
 
-### Variable-Size Upper Bound
+### 可变长度上界
 
-Theorem 2 removes the fixed-size `log log log n` barrier by allowing the pointer
-length to vary. The construction first reduces the high-load case to a constant
-load-factor construction, then builds a constant-load table whose pointer length
-has constant expectation and doubly exponential tail.
+定理 2 通过允许 pointer 长度变化，去掉了固定长度中的 `log log log n` 障碍。构造先将
+高负载情形归约到常数负载情形，然后构造一个常数负载表，使其 pointer 长度有常数期望
+并具有双指数尾界。
 
-The constant-load construction hashes keys into containers of expected size
-`Theta(log n)`. Each container has levels. Level `i` has about half as many
-buckets as level `i-1`, with constant bucket capacity. If allocation fails at
-one level, the key is tried at the next level. Overflow arrays isolate bad
-levels so that a local bad event cannot cascade and break the whole container.
+常数负载构造把 key 哈希到期望大小为 `Theta(log n)` 的 containers。每个 container
+内部有多个 levels。第 `i` 层的 bucket 数大约是上一层的一半，bucket 容量是常数。若在
+某一层分配失败，就尝试下一层。overflow arrays 用来隔离坏层，防止局部坏事件级联破坏
+整个 container。
 
-The reason expectation stays small is geometric: reaching level `i` requires
-failing repeatedly, and each level has only a constant fraction of full buckets.
-The reason the tail is doubly exponential is that late overflows correspond to
-very small level capacities, whose bad events are exponentially unlikely in the
-level size.
+期望之所以小，是因为到达第 `i` 层需要连续失败，而每层只有常数比例 bucket 是满的。
+尾界之所以是双指数，是因为较晚的 overflow 对应非常小的 level capacity，而这样的坏
+事件概率关于 level size 指数级下降。
 
-### Lower Bounds
+### 下界
 
-Theorem 3 proves variable-size tiny pointers need
-`Omega(log delta^{-1})` expected bits. The proof uses a potential-like argument:
-some slots may be "useful" to many keys, but there cannot be too many such
-slots, and repeatedly inserting random keys forces many allocations to use less
-useful slots, which require larger pointers.
+定理 3 证明可变长度 tiny pointers 需要期望 `Omega(log delta^{-1})` 位。证明使用
+potential 思想：有些 slot 对很多 key “有用”，但这样的 slot 不可能太多；反复随机插入
+会迫使很多分配使用不那么有用的 slot，从而需要更长 pointer。
 
-Theorem 4 proves fixed-size tiny pointers need
-`Omega(log log log n + log delta^{-1})` bits. After the
-`Omega(log delta^{-1})` part, the new ingredient is a balls-and-bins lower bound:
-if only `S = 2^s` pointer values are available per key, then each key has only
-`S` predetermined candidate bins. A classic lower bound for sequential
-balls-into-bins says that too few choices lead to an overfull bin. Avoiding this
-forces `S = Omega(log log n)`, hence `s = Omega(log log log n)`.
+定理 4 证明固定长度 tiny pointers 需要
+`Omega(log log log n + log delta^{-1})` 位。在已有 `Omega(log delta^{-1})` 的基础上，
+新的部分来自 balls-and-bins 下界：如果每个 key 只有 `S = 2^s` 个 pointer 值，那么它
+只有 `S` 个预定候选 bin。经典 sequential balls-into-bins 下界说明选择太少会导致某个
+bin 过满。为了避免这种情况，必须有 `S = Omega(log log n)`，因此
+`s = Omega(log log log n)`。
 
-## Detailed Technical Understanding
+## 详细技术理解
 
-### Why the Usual `log n` Lower Bound Does Not Apply
+### 为什么通常的 `log n` 下界不适用
 
-A normal pointer must identify one of `n` slots without help, so it needs
-`log n` bits. A tiny pointer is deliberately not self-contained. The slot is
-identified by:
+普通指针必须独立标识 `n` 个 slot 中的一个，因此需要 `log n` 位。tiny pointer 刻意
+不是自解释的。槽位由下面的式子确定：
 
 ```text
 slot = Dereference(k, p)
 ```
 
-where `k` is already known by the caller. Thus the information used to identify
-the location is split between:
+其中 `k` 已经由调用方知道。因此用于定位的信息被拆分成：
 
-- the owner's key/context `k`;
-- the short returned pointer `p`;
-- the table's public/random metadata.
+- owner 的 key 或上下文 `k`；
+- 返回的短 pointer `p`；
+- 表中的公开或随机元数据。
 
-This is why the lower bound for standalone addresses is the wrong lower bound.
-The right question is: how many bits must `p` contribute once `k` is already
-known?
+所以 standalone address 的下界不是正确下界。正确问题应是：在 `k` 已知后，`p` 还
+必须贡献多少位？
 
-### Equivalence to Probe Sequences
+### 与 probe sequences 的等价视角
 
-For every key `k`, imagine an infinite probe sequence:
+对每个 key `k`，可以想象一个无限 probe sequence：
 
 ```text
 h_1(k), h_2(k), h_3(k), ...
 ```
 
-If `Allocate(k)` places `k` in `h_i(k)`, then the tiny pointer only has to encode
-`i`, or enough information to reconstruct the corresponding local choice. The
-value of `Dereference(k, p)` is the chosen `h_i(k)`.
+如果 `Allocate(k)` 把 `k` 放在 `h_i(k)`，那么 tiny pointer 只需要编码 `i`，或编码
+足以重建该局部选择的信息。`Dereference(k, p)` 的值就是被选中的 `h_i(k)`。
 
-In this view:
+在这个视角下：
 
-- keys are balls;
-- slots are bins;
-- a live assignment must be collision-free;
-- pointer length is roughly `log i`;
-- high load means the table has very few empty bins;
-- the hard case is arbitrary deletion and reinsertion.
+- keys 是 balls；
+- slots 是 bins；
+- 活跃分配必须无冲突；
+- pointer 长度大致是 `log i`；
+- 高负载意味着表中空 bin 很少；
+- 困难情形是任意删除和重新插入。
 
-The "same key reappears" issue is important. On the first insertion of key `k`,
-its hash/probe sequence is independent of the table state. After `k` is deleted
-and later inserted again, the table state may already contain consequences of
-the old placement of `k`. This history dependence is the reason simple probing
-schemes are hard to analyze dynamically.
+“同一个 key 重新出现”很重要。第一次插入 key `k` 时，它的 hash/probe sequence 与表
+状态独立；但 `k` 删除后再插入时，当前表状态可能已经包含它过去放置造成的影响。这种
+历史依赖正是简单 probing schemes 难以动态分析的原因。
 
-### Fixed-Size Construction in Operation-Level Detail
+### 固定长度构造的操作级细节
 
-Goal: support load `1 - delta` with every tiny pointer having the same maximum
-size:
+目标：在负载率 `1 - delta` 下，让每个 tiny pointer 都有相同最大长度：
 
 ```text
 O(log log log n + log delta^{-1})
 ```
 
-The construction combines two tables.
+构造组合两个表。
 
-#### Primary Table
+#### 主表
 
-The primary table is a load-balancing table.
+主表是一个 load-balancing table。
 
-Parameters:
+参数：
 
-- table size `m = (1 - delta/2)n`;
-- target failure slack about `delta^2`;
-- bucket size `b = Theta(delta^{-2} log delta^{-1})`.
+- 表大小 `m = (1 - delta/2)n`；
+- 目标失败松弛大约为 `delta^2`；
+- bucket 大小 `b = Theta(delta^{-2} log delta^{-1})`。
 
-Allocation:
+分配：
 
-1. Hash key `k` to a bucket `h(k)`.
-2. If some slot in the bucket is free, put the value there.
-3. Return the local slot index `j` as the tiny pointer.
-4. If the bucket is full, declare primary failure and send the allocation to
-   the secondary table.
+1. 将 key `k` 哈希到 bucket `h(k)`。
+2. 如果 bucket 中有空 slot，就把 value 放入。
+3. 返回局部 slot index `j` 作为 tiny pointer。
+4. 如果 bucket 已满，则主表失败，将该分配交给副表。
 
-Dereference:
+解引用：
 
-1. Recompute `h(k)`.
-2. Interpret `p` as a local slot inside that bucket.
+1. 重新计算 `h(k)`。
+2. 将 `p` 解释为该 bucket 内的局部 slot。
 
-Free:
+释放：
 
-1. Recompute `h(k)`.
-2. Mark the local slot indicated by `p` as free.
+1. 重新计算 `h(k)`。
+2. 将 `p` 指示的局部 slot 标为空闲。
 
-Why this is small:
+为什么短：
 
 ```text
 local pointer size = log b
@@ -176,326 +155,294 @@ local pointer size = log b
                    = O(log delta^{-1})
 ```
 
-This primary table alone is not enough, because it may fail on a small but
-non-negligible fraction of allocations. Its purpose is to make the overflow set
-small.
+单独的主表还不够，因为它会让一小部分分配失败。它的作用是让 overflow set 足够小。
 
-#### Secondary Table
+#### 副表
 
-The secondary table handles primary overflows.
+副表处理主表 overflow。
 
-Parameters:
+参数：
 
-- size `n' = delta n / 2`;
-- sparse load about `Theta(1 / log log n')`;
-- bucket size `Theta(log log n')`.
+- 大小 `n' = delta n / 2`；
+- 稀疏负载大约为 `Theta(1 / log log n')`；
+- bucket 大小 `Theta(log log n')`。
 
-Allocation:
+分配：
 
-1. Hash `k` to two buckets.
-2. Place the allocation in the bucket with more free slots.
-3. Return one bit saying which of the two buckets was used plus the local slot.
+1. 将 `k` 哈希到两个 bucket。
+2. 选择空 slot 更多的 bucket 放入。
+3. 返回一位信息说明使用了两个 bucket 中的哪一个，再加上局部 slot。
 
-Pointer size:
+pointer 大小：
 
 ```text
 1 + log(Theta(log log n')) = O(log log log n)
 ```
 
-The primary table guarantees that only about `delta^2 n` live allocations
-overflow. Since the secondary table has `Theta(delta n)` slots, the secondary
-load is small enough for the power-of-two-choices analysis.
+主表保证只有大约 `delta^2 n` 个活跃分配 overflow。副表有 `Theta(delta n)` 个 slot，
+因此副表负载足够低，可以使用 power-of-two-choices 分析。
 
-#### Combined Pointer Format
+#### 组合后的 pointer 格式
 
-A fixed-size pointer stores:
+固定长度 pointer 存储：
 
 ```text
 table tag | local pointer
 ```
 
-The tag says primary vs secondary. The local pointer is padded to the maximum of
-the two local formats.
+tag 表示主表或副表。局部 pointer 被 padding 到两种格式中的较大长度。
 
-Thus:
+因此：
 
 ```text
 size = O(1 + log delta^{-1} + log log log n)
 ```
 
-#### Correctness Checklist
+#### 正确性检查清单
 
-To verify correctness for an allocation:
+验证一次分配是否正确：
 
-1. If primary succeeds, only one key gets that primary slot because bucket free
-   bits or free lists enforce exclusivity.
-2. If primary fails, the allocation is inserted into the secondary table.
-3. The secondary table also allocates only free slots.
-4. The pointer contains enough information to recompute the same location from
-   `k`.
-5. `Free(k, p)` uses the same decoding path and releases exactly the occupied
-   slot.
+1. 如果主表成功，bucket free bits 或 free lists 保证只有一个 key 得到该主表 slot。
+2. 如果主表失败，该分配进入副表。
+3. 副表也只分配空 slot。
+4. pointer 包含足够信息，可以从 `k` 重新计算相同位置。
+5. `Free(k, p)` 使用同一路径解码，并释放准确的 occupied slot。
 
-To verify high-probability success:
+验证高概率成功：
 
-1. Lemma 1 says the number of live primary failures is `O(delta^2 n)` with high
-   probability.
-2. The secondary table has `Theta(delta n)` slots, so the overflow load is much
-   less than its capacity threshold.
-3. Lemma 2 says the secondary allocations succeed with high probability.
-4. A union bound over the table components gives high-probability success.
+1. Lemma 1 说明活跃主表失败数以高概率为 `O(delta^2 n)`。
+2. 副表有 `Theta(delta n)` 个 slot，因此 overflow load 远低于副表容量阈值。
+3. Lemma 2 说明副表分配以高概率成功。
+4. 对各组件使用 union bound 得到整体高概率成功。
 
-### Variable-Size Construction in Operation-Level Detail
+### 可变长度构造的操作级细节
 
-Goal: support load `1 - delta` with expected tiny-pointer size:
+目标：在负载率 `1 - delta` 下，tiny pointer 期望大小为：
 
 ```text
 O(1 + log delta^{-1})
 ```
 
-The high-load case is reduced to a constant-load case by reusing the
-primary/secondary idea: the primary table absorbs almost everything; the
-secondary table only needs to store a small overflow set at constant load.
-Therefore the key new problem is:
+高负载情形通过复用主表/副表思想归约到常数负载情形：主表吸收几乎所有分配，副表只需
+在常数负载下存储少量 overflow。因此新的核心问题是：
 
 ```text
-Build a constant-load dereference table whose pointer has O(1) expected length.
+构造一个常数负载 dereference table，使 pointer 期望长度为 O(1)。
 ```
 
 #### Containers
 
-The construction hashes keys into about `n / log n` containers. Each container is
-allowed to hold at most:
+构造将 key 哈希到大约 `n / log n` 个 containers。每个 container 最多允许：
 
 ```text
 s = c log n
 ```
 
-items. By Chernoff bounds, choosing `c` large enough makes every container stay
-below capacity with high probability.
+个 item。由 Chernoff bounds 可知，选择足够大的 `c` 后，每个 container 都会以高概率
+低于容量。
 
-Each container is independent and uses `O(log n)` slots, so all containers use
-`O(n)` slots total.
+每个 container 独立工作，使用 `O(log n)` 个 slot，因此所有 containers 合计使用
+`O(n)` 个 slot。
 
-#### Levels Inside a Container
+#### Container 内部的 levels
 
-Inside one container there are levels:
+在一个 container 内有 levels：
 
 ```text
 i = 0, 1, ..., log_2 s - 1
 ```
 
-Level `i` has:
+第 `i` 层有：
 
 ```text
 s_i = s / 2^i
 ```
 
-buckets, each with constant capacity `b`.
+个 buckets，每个 bucket 容量为常数 `b`。
 
-The intended behavior is geometric:
+预期行为是几何式的：
 
-- try level 0 first;
-- if the selected bucket is full, try level 1;
-- if that fails, try level 2;
-- and so on.
+- 先尝试 level 0；
+- 如果选中的 bucket 满了，尝试 level 1；
+- 如果还失败，尝试 level 2；
+- 依此类推。
 
-Because each level has only constant bucket capacity but low effective load, the
-probability of moving from one level to the next is at most a constant such as
-`1/b`. Therefore reaching level `i` has probability at most about `b^{-i}`.
+由于每层 bucket 容量为常数且有效负载较低，进入下一层的概率至多是某个常数，例如
+`1/b`。因此到达 level `i` 的概率大约至多为 `b^{-i}`。
 
-#### Why Overflow Arrays Are Needed
+#### 为什么需要 overflow arrays
 
-The naive level cascade can fail badly if several small levels happen to be
-unlucky. Small levels do not individually have high-probability guarantees, and a
-bad level could send too much work to all later levels.
+朴素的 level cascade 可能在几个小 level 连续运气不好时崩坏。小 level 单独没有
+高概率保证；一个坏 level 可能把过多工作推给所有后续 level。
 
-The fix is to give each level `i` an overflow array of size `s_i`. The algorithm
-tracks a counter `L_i`: the number of allocations that have reached level `i`,
-including those that are later sent beyond it. If the next level would be asked
-to handle too much, the allocation is diverted into the overflow array of the
-current level.
+修复方法是给每个 level `i` 一个大小为 `s_i` 的 overflow array。算法维护计数器 `L_i`：
+到达过 level `i` 的分配数量，包括后来继续被送到更深层的分配。若下一层会被要求处理
+过多对象，就把该分配转入当前 level 的 overflow array。
 
-The crucial invariant is:
+关键不变量是：
 
 ```text
 L_i <= s_i
 ```
 
-Because the overflow array for level `i` also has size `s_i`, it cannot run out
-of room. This isolates bad luck: if a level behaves unusually badly, the cost is
-paid locally in an overflow array rather than propagating to the rest of the
-container.
+因为 level `i` 的 overflow array 也有大小 `s_i`，所以它不会耗尽。这样可以隔离坏运气：
+如果某层表现异常差，代价在该层 overflow array 中局部支付，而不会传播到 container
+后面的所有层。
 
-#### Allocation Procedure
+#### 分配过程
 
-For key `k`:
+对 key `k`：
 
-1. Hash `k` to a container.
-2. If the container already has `s` items, fail.
-3. For each level `i`:
-   - increment `L_i`;
-   - try to place `k` in the level-`i` load-balancing table;
-   - if successful, return a pointer encoding:
-     - level `i`;
-     - "ordinary level table";
-     - local bucket slot;
-   - if the next level would exceed its limit, place `k` in the overflow array
-     for level `i` and return a pointer encoding:
-     - level counted from the back;
-     - "overflow";
-     - local overflow slot.
+1. 将 `k` 哈希到某个 container。
+2. 如果 container 已经有 `s` 个 item，则失败。
+3. 对每个 level `i`：
+   - 增加 `L_i`；
+   - 尝试将 `k` 放入 level `i` 的 load-balancing table；
+   - 若成功，返回一个 pointer，编码：
+     - level `i`；
+     - “普通 level table”；
+     - 局部 bucket slot；
+   - 若下一层会超过限制，则把 `k` 放到 level `i` 的 overflow array，并返回一个
+     pointer，编码：
+     - 从后往前数的 level 编号；
+     - “overflow”；
+     - 局部 overflow slot。
 
-The "counted from the back" encoding for overflow is subtle and important. If
-overflow happens late, `s_i` is small, so the local slot index is short. Encoding
-`log s - 1 - i` rather than `i` makes the level identity short in exactly those
-late-overflow cases.
+overflow 情况下“从后往前数”的编码很微妙也很重要。如果 overflow 发生得很晚，`s_i`
+很小，因此局部 slot index 很短。编码 `log s - 1 - i` 而不是 `i`，正好让这些晚期
+overflow 的层号本身也短。
 
-#### Pointer Size Bound
+#### Pointer 大小界
 
-If allocation succeeds in the level-`i` load-balancing table, the pointer size is
-roughly:
+如果分配在 level `i` 的 load-balancing table 成功，pointer 大小约为：
 
 ```text
 O(log i) + O(1)
 ```
 
-If allocation goes to the level-`i` overflow array, the pointer size is roughly:
+如果分配进入 level `i` 的 overflow array，pointer 大小约为：
 
 ```text
 O(log s_i)
 ```
 
-Probability of ordinary level `i`:
+普通 level `i` 的概率：
 
 ```text
 Pr[B_i] <= 1 / b^i
 ```
 
-because to reach level `i`, all previous selected buckets must have been full.
+因为要到达 level `i`，前面所有选中的 buckets 都必须满。
 
-Probability of overflow at level `i`:
+level `i` overflow 的概率：
 
 ```text
 Pr[O_i] <= exp(-Omega(s_i))
 ```
 
-using Lemma 1, because level `i` becomes dangerously overloaded only with
-exponentially small probability in its size.
+这是由 Lemma 1 推出，因为 level `i` 只有在关于其 size 指数小概率的坏事件下才会危险
+过载。
 
-Thus the expected pointer length is:
+因此期望 pointer 长度为：
 
 ```text
 sum_i Pr[B_i] O(log i) + sum_i Pr[O_i] O(log s_i) = O(1)
 ```
 
-The tail bound is even stronger: the probability that pointer length exceeds
-`ell` is doubly exponentially small in `ell`. Intuitively, a long pointer means
-either reaching an exponentially late ordinary level or seeing an overflow in a
-level whose capacity scale makes that event exponentially unlikely.
+尾界更强：pointer 长度超过 `ell` 的概率关于 `ell` 双指数小。直观地说，长 pointer
+意味着要么到达指数级靠后的普通 level，要么在某个 capacity scale 下发生指数小概率的
+overflow。
 
-### Why Variable Size Beats Fixed Size
+### 为什么可变长度优于固定长度
 
-Fixed-size pointers must reserve enough bits for the worst live pointer that can
-appear with high probability. That worst pointer has to handle rare but possible
-deep placements, producing the `log log log n` term.
+固定长度 pointer 必须为高概率可能出现的最坏 live pointer 预留足够位数。这个最坏
+pointer 需要处理罕见但可能的深层 placement，因此产生 `log log log n` 项。
 
-Variable-size pointers only pay for rare deep placements when they occur. Since
-the probability of deep placement decays fast, the expected cost remains
-constant (plus the `log delta^{-1}` high-load term).
+可变长度 pointer 只在罕见深层 placement 真的发生时付费。由于深层 placement 的概率
+快速下降，期望成本仍为常数，再加上高负载的 `log delta^{-1}` 项。
 
-This distinction is one of the paper's nicest conceptual points:
+这是论文最漂亮的概念点之一：
 
 ```text
-fixed-size model: pay for the rare event on every pointer
-variable-size model: pay for the rare event only when it happens
+fixed-size model: 每个 pointer 都为罕见事件付费
+variable-size model: 只有罕见事件发生时才付费
 ```
 
-### Lower Bound for Variable-Size Pointers
+### 可变长度 pointer 的下界
 
-Theorem 3 proves expected size `Omega(log delta^{-1})`.
+定理 3 证明期望大小为 `Omega(log delta^{-1})`。
 
-Proof intuition:
+证明直觉：
 
-1. Let `ell = Theta(delta^{-1})`.
-2. If pointer value `i` means the slot `h_i(k)`, then short pointers only allow
-   the first `ell` candidate slots.
-3. Define the potential of a slot `j`:
+1. 令 `ell = Theta(delta^{-1})`。
+2. 如果 pointer value `i` 表示 slot `h_i(k)`，那么短 pointer 只能使用前 `ell` 个候选。
+3. 定义 slot `j` 的 potential：
 
 ```text
-phi(j) = fraction of key/candidate pairs (k, i <= ell) that map to j
+phi(j) = 映射到 j 的 key/candidate pairs (k, i <= ell) 所占比例
 ```
 
-4. High-potential slots are useful to many keys, but there cannot be many of
-   them, since the total potential over all slots is only `ell`.
-5. Low-potential empty slots are plentiful, but a random new key is unlikely to
-   have one of its first `ell` candidates among them.
-6. Under a random alternating insertion/deletion workload at high load, a
-   constant fraction of insertions therefore cannot be placed using the first
-   `ell` candidate slots.
-7. Those insertions need pointer value greater than `ell`, hence at least
-   `Omega(log ell) = Omega(log delta^{-1})` bits.
+4. 高 potential slots 对很多 key 有用，但这种 slots 不可能太多，因为所有 slot 的总
+   potential 只有 `ell`。
+5. 低 potential 的空 slots 虽然多，但随机新 key 的前 `ell` 个候选不太可能命中它们。
+6. 在高负载下的随机交替插入/删除 workload 中，常数比例的插入不能使用前 `ell` 个候选
+   完成。
+7. 这些插入需要 pointer value 大于 `ell`，因此至少需要
+   `Omega(log ell) = Omega(log delta^{-1})` 位。
 
-This lower bound is not saying every pointer must be large. It says the expected
-length cannot be too small because a constant fraction of random insertions are
-forced out of the short-candidate region.
+这个下界不是说每个 pointer 都必须很大，而是说期望长度不能太小，因为常数比例的随机
+插入会被迫离开短候选区域。
 
-### Lower Bound for Fixed-Size Pointers
+### 固定长度 pointer 的下界
 
-Theorem 4 adds `Omega(log log log n)` for fixed-size pointers.
+定理 4 为固定长度 pointer 增加了 `Omega(log log log n)`。
 
-If fixed pointer size is `s`, then every key has only:
+如果固定 pointer 大小是 `s`，那么每个 key 只有：
 
 ```text
 S = 2^s
 ```
 
-possible tiny-pointer values. Therefore each key has only `S` candidate bins.
+种可能 tiny-pointer values。因此每个 key 只有 `S` 个 candidate bins。
 
-The lower-bound reduction:
+下界归约如下：
 
-1. Assume a dereference table with fixed pointer size `s = o(log log log n)`.
-2. Then `S = 2^s = o(log log n)`.
-3. Use the dereference table to define a sequential balls-into-bins process:
-   each ball/key comes with its `S` candidate bins, derived from
-   `Dereference(k, 1), ..., Dereference(k, S)`.
-4. A classic balls-and-bins lower bound says any sequential process with only
-   `S` choices has maximum load at least:
+1. 假设存在固定 pointer 大小 `s = o(log log log n)` 的 dereference table。
+2. 则 `S = 2^s = o(log log n)`。
+3. 用该 dereference table 定义一个 sequential balls-into-bins 过程：每个 ball/key
+   带有由 `Dereference(k, 1), ..., Dereference(k, S)` 导出的 `S` 个候选 bins。
+4. 经典 balls-and-bins 下界说明，任何只有 `S` 个选择的 sequential process 最大负载
+   至少为：
 
 ```text
 Omega((log log m) / S)
 ```
 
-5. Since `S = o(log log m)`, some bin gets `omega(1)` balls.
-6. But the dereference table's successful allocations are collision-free in the
-   original `n` slots; after grouping `n` slots into `m = Theta(n)` bins, every
-   grouped bin can contain only `O(1)` balls.
-7. Contradiction.
+5. 因为 `S = o(log log m)`，某个 bin 会得到 `omega(1)` 个 balls。
+6. 但 dereference table 的成功分配在原始 `n` 个 slots 中无冲突；将 `n` 个 slots 分组
+   成 `m = Theta(n)` 个 bins 后，每个 grouped bin 只能包含 `O(1)` 个 balls。
+7. 产生矛盾。
 
-Therefore `S` must be at least `Omega(log log n)`, so:
+因此 `S` 至少是 `Omega(log log n)`，所以：
 
 ```text
 s >= Omega(log log log n)
 ```
 
-Combining with the variable-size lower bound gives:
+结合可变长度下界，固定长度 pointer 得到：
 
 ```text
 s = Omega(log log log n + log delta^{-1})
 ```
 
-for fixed-size pointers.
+### 技术上最厉害的地方
 
-### What Is Technically Impressive
+1. 抽象很干净：它把“pointer 表示什么”和“pointer 自身存多少位”分离开。
+2. 固定长度和可变长度模型中都有紧的上下界。
+3. 构造能处理任意动态更新，包括同一个 key 的删除和重新插入；很多简单 probing schemes
+   在这种情况下缺乏清晰分析。
+4. 可变长度构造中的 overflow arrays 不是临时补丁，而是用于局部化坏事件并保持强尾界
+   的核心机制。
+5. 论文把同一工具转化为多个黑盒数据结构变换，说明 pointer overhead 是反复出现的
+   元数据瓶颈，而不是某个孤立问题。
 
-1. The abstraction is clean: it separates "what a pointer means" from "how many
-   bits the pointer itself stores."
-2. The bounds are tight in both the fixed-size and variable-size models.
-3. The construction handles arbitrary dynamic updates, including deletion and
-   reinsertion of the same key, where many simple probing schemes lack clean
-   analyses.
-4. The variable-size construction uses overflow arrays not as a hack but as a
-   way to localize bad events and preserve a strong tail bound.
-5. The paper turns the same tool into several black-box data-structure
-   transformations, showing that pointer overhead is a recurring bottleneck
-   rather than an isolated annoyance.
